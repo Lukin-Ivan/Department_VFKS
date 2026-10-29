@@ -8,9 +8,10 @@ import subprocess
 n_per_side = 6
 total_time = 100
 start_record_time = 10
-delta_t = 0.001
-delta_t_output = 0.1
+delta_t = 0.01
+delta_t_output = 0.01
 density = 1.0
+T_0 = 2.0
 m = 1.0
 N = n_per_side ** 3
 
@@ -23,11 +24,12 @@ params = {
     "output_file_name_velocities": output_file_name_velocities,
     "output_file_name_coordinates": output_file_name_coordinates,
     "n_per_side": n_per_side,
-    "total_time": total_time,
+    "total_time": total_time + start_record_time,
     "start_record_time": start_record_time,
     "delta_t": delta_t,
     "delta_t_output": delta_t_output,
     "density": density,
+    "T_0": T_0,
     "m": m
 }
 config_path = "config.json"
@@ -124,6 +126,7 @@ v_mean = (8 * T / np.pi) ** 0.5
 Lambda = 3 * D / v_mean
 sigma = v_mean / (3 * 2 ** 0.5 * D)
 
+print("T =", T)
 
 print('Lambda =', Lambda)
 print('sigma =', sigma)

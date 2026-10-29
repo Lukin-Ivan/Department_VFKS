@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <array>
+#include <algorithm>
 #include "json.hpp"
 
 struct Vec3
@@ -55,6 +56,7 @@ struct Particle
 };
 
 double compute_forces(std::vector<Particle>& particles, double box_len, double r_cut = 3.0){
+    r_cut = std::min(r_cut, box_len / 2);
     double pot_energy = 0.0;
     for (auto& p : particles){
         p.f = {0.0, 0.0, 0.0}; // обнуляем предыдущие силы
@@ -98,7 +100,7 @@ std::array<double, 7> compute_parametrs(std::vector<Particle>& particles, int& s
     return std::array<double, 7> {t, pot_energy, kin_energy, p_x / p_rms, p_y / p_rms, p_z / p_rms, r_rms};
 }
 
-std::vector<Particle> generate_position(std::vector<Particle>& particles,int n_per_side, double density){
+void generate_position(std::vector<Particle>& particles,int n_per_side, double density){
     int N = n_per_side * n_per_side * n_per_side; // частиц всего
     double box_len = std::cbrt(N / density); // длина куба
     double spacing = box_len / n_per_side; // шаг решетки
@@ -114,8 +116,33 @@ std::vector<Particle> generate_position(std::vector<Particle>& particles,int n_p
             }
         }
     }
-    return particles;
 }
+
+void velocities_with_temperature(std::vector<Particle>& particles, double T_0, double m){
+    double K = 0.0;
+    for (auto& p : particles){
+        K += p.v.norm();
+    }
+    double scale = std::sqrt(3.0 * particles.size() * T_0 / (m * K));
+    for (auto& p : particles){
+        p.v = p.v * scale;
+    }
+}
+
+void generate_velocities(std::vector<Particle>& particles, double T_0, double m, int seed = 67){
+    std::mt19937 gen(seed);
+    std::normal_distribution<double> norm_dist(0.0, std::sqrt(T_0 / m));
+    Vec3 v_cm = {0.0, 0.0, 0.0};
+    for (auto& p : particles){
+        p.v = {norm_dist(gen), norm_dist(gen), norm_dist(gen)};
+        v_cm += p.v / particles.size();
+    }
+    for (auto& p : particles){
+        p.v -= v_cm;
+    }
+    velocities_with_temperature(particles, T_0, m);
+}
+
 
 using json = nlohmann::json;
 
@@ -131,6 +158,7 @@ int main(int argc, char* argv[]){
     double delta_t = config["delta_t"]; // шаг разбиения по времени
     double delta_t_output = config["delta_t_output"]; // шаг записи по времени
     double density = config["density"]; // плотность
+    double T_0 = config["T_0"];
     double m = config["m"]; // масса одной частицы
     std::string output_file_name_parametrs = config["output_file_name_parametrs"];
     std::string output_file_name_velocities = config["output_file_name_velocities"];
@@ -144,7 +172,9 @@ int main(int argc, char* argv[]){
     int start_record_step = static_cast<int>(std::round(start_record_time / delta_t));
 
     std::vector<Particle> particles(N); // создание вектора из N частиц
-    particles = generate_position(particles, n_per_side, density); // расставление частиц в центр кубиков
+    generate_position(particles, n_per_side, density); // расставление частиц в центр кубиков
+    generate_velocities(particles, T_0, m); // генерация начальных скоростей с температурой T_0
+
     std::vector<std::vector<Vec3>> velocity_history;
     std::vector<std::array<double,7>> records_history;
 
@@ -174,6 +204,9 @@ int main(int argc, char* argv[]){
                 p.r0 = p.r;
             }
             flag = false;
+        }
+        if (step % output_steps == 0 && step < static_cast<int>(0.7 * start_record_step)){
+            velocities_with_temperature(particles, T_0, m);
         }
         if (step % output_steps == 0 && step >= start_record_step){
             records_history.push_back(compute_parametrs(particles, step, pot_energy, m, delta_t));
