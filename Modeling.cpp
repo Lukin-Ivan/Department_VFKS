@@ -143,6 +143,29 @@ void generate_velocities(std::vector<Particle>& particles, double T_0, double m,
     velocities_with_temperature(particles, T_0, m);
 }
 
+void accumulate_rdf(const std::vector<Particle>& particles, double box_len, std::vector<double>& rdf_histogram, int& num_frames_rdf, double r_max, int n_bins) {
+    double dr = r_max / n_bins;
+    int N = particles.size();
+    
+    for (int i = 0; i < N; ++i) {
+        for (int j = i + 1; j < N; ++j) {
+            Vec3 delta_r = particles[i].r - particles[j].r;
+
+            delta_r.x -= box_len * std::round(delta_r.x / box_len);
+            delta_r.y -= box_len * std::round(delta_r.y / box_len);
+            delta_r.z -= box_len * std::round(delta_r.z / box_len);
+            
+            double r = std::sqrt(delta_r.norm());
+            if (r < r_max) {
+                int bin = static_cast<int>(r / dr);
+                if (bin < n_bins) {
+                    rdf_histogram[bin] += 2.0;
+                }
+            }
+        }
+    }
+    num_frames_rdf++;
+}
 
 using json = nlohmann::json;
 
@@ -163,6 +186,7 @@ int main(int argc, char* argv[]){
     std::string output_file_name_parametrs = config["output_file_name_parametrs"];
     std::string output_file_name_velocities = config["output_file_name_velocities"];
     std::string output_file_name_coordinates = config["output_file_name_coordinates"];
+    std::string output_file_name_rdf = config["output_file_name_rdf"];
 
     int N = n_per_side * n_per_side * n_per_side; // частиц всего
     double box_len = std::cbrt(N / density); // длина куба
@@ -170,6 +194,10 @@ int main(int argc, char* argv[]){
     int total_steps = static_cast<int>(std::round(total_time / delta_t));
     int output_steps = static_cast<int>(std::round(delta_t_output / delta_t));
     int start_record_step = static_cast<int>(std::round(start_record_time / delta_t));
+    double r_max = box_len / 2.0;
+    int n_bins = 200;
+    std::vector<double> rdf_histogram(n_bins, 0.0);
+    int num_frames_rdf = 0;
 
     std::vector<Particle> particles(N); // создание вектора из N частиц
     generate_position(particles, n_per_side, density); // расставление частиц в центр кубиков
@@ -181,9 +209,11 @@ int main(int argc, char* argv[]){
     std::ofstream file_parametrs(output_file_name_parametrs); // открытие файла для записи энергии и импульса
     std::ofstream file_velocities(output_file_name_velocities);
     std::ofstream file_coordinates(output_file_name_coordinates);
+    std::ofstream file_rdf(output_file_name_rdf);
 
     file_parametrs << "t,U,K,p_x,p_y,p_z,r_rms,vacf\n";
     file_velocities << "v_pr\n";
+    file_rdf << "r,g_r\n";
     bool flag = true;
 
     double pot_energy = compute_forces(particles, box_len); // расчет сил в момент времени t 
@@ -220,6 +250,7 @@ int main(int argc, char* argv[]){
                 current_velocities[i] = particles[i].v;
             }
             velocity_history.push_back(current_velocities);
+            accumulate_rdf(particles, box_len, rdf_histogram, num_frames_rdf, r_max, n_bins);
         }
     }
     int T = velocity_history.size();
@@ -256,9 +287,21 @@ int main(int argc, char* argv[]){
             file_parametrs << "nan\n";
         }
     }
+    
+    double dr = r_max / n_bins;
+    
+    for (int i = 0; i < n_bins; ++i) {
+        double r_in = i * dr;
+        double r_out = (i + 1) * dr;
+        double r_center = r_in + 0.5 * dr;
+        double shell_volume = (4.0 / 3.0) * std::numbers::pi * (r_out * r_out * r_out - r_in * r_in * r_in);
+        double normalization = num_frames_rdf * density * shell_volume * N;
+        double g_r = rdf_histogram[i] / normalization;
+        file_rdf << r_center << "," << g_r << "\n";
+    }
 
     file_parametrs.close();
     file_velocities.close();
     file_coordinates.close();
-
+    file_rdf.close();
 }

@@ -10,19 +10,22 @@ total_time = 100
 start_record_time = 10
 delta_t = 0.01
 delta_t_output = 0.01
-density = 1.0
-T_0 = 2.0
+density = 0.95
+T_0 = 1.0
 m = 1.0
 N = n_per_side ** 3
 
 output_file_name_parametrs = f"data/parametrs_N_{N}_density_{density}_t_{total_time}_start_record_{start_record_time}_dt_{delta_t}.csv"
 output_file_name_velocities = f"data/velocities_N_{N}_density_{density}_t_{total_time}_start_record_{start_record_time}_dt_{delta_t}.csv"
 output_file_name_coordinates = f"data/coordinates_N_{N}_density_{density}_t_{total_time}_start_record_{start_record_time}_dt_{delta_t}.xyz"
+output_file_name_rdf = f"data/rdf_N_{N}_density_{density}_t_{total_time}_start_record_{start_record_time}_dt_{delta_t}.csv"
+
 
 params = {
     "output_file_name_parametrs": output_file_name_parametrs,
     "output_file_name_velocities": output_file_name_velocities,
     "output_file_name_coordinates": output_file_name_coordinates,
+    "output_file_name_rdf": output_file_name_rdf,
     "n_per_side": n_per_side,
     "total_time": total_time + start_record_time,
     "start_record_time": start_record_time,
@@ -43,6 +46,7 @@ result = subprocess.run([executable_path, config_path], capture_output=True, tex
 
 data_parametrs = pd.read_csv(output_file_name_parametrs)
 data_velocities = pd.read_csv(output_file_name_velocities)
+data_rdf = pd.read_csv(output_file_name_rdf)
 
 t = data_parametrs['t'] - start_record_time
 U = data_parametrs['U']
@@ -54,16 +58,19 @@ p_z = data_parametrs['p_z']
 r2 = data_parametrs['r_rms']
 vacf = data_parametrs['vacf']
 v_pr = data_velocities['v_pr']
+r = data_rdf['r']
+g_r = data_rdf['g_r']
 
 fig = plt.figure(figsize=(11, 12))
 fig.suptitle(f"N = {N}, t = {total_time} с, $\\Delta t = {delta_t}$ с", fontsize=14)
-gs = plt.GridSpec(3, 2, figure=fig)
+gs = plt.GridSpec(4, 2, figure=fig)
 ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[1, 0])
 ax3 = fig.add_subplot(gs[0, 1])
 ax4 = fig.add_subplot(gs[1, 1])
 ax5 = fig.add_subplot(gs[2, 0])
 ax6 = fig.add_subplot(gs[2, 1])
+ax7 = fig.add_subplot(gs[3, :])
 
 ax1.plot(t, U, color='C0', linestyle='-', lw=2, label='$W_{pot}(t)$')
 ax1.plot(t, K, color='C1', linestyle='-', lw=2, label='$E_{kin}(t)$')
@@ -106,7 +113,11 @@ ax6.plot(t, vacf, color='C0', linestyle='-', lw=2, label='АКФС')
 ax6.set_xlabel('t, c')
 ax6.set_ylabel('VACF')
 
-for ax in [ax1, ax2, ax3, ax4, ax5, ax6]:
+ax7.plot(r, g_r, color='C0', linestyle='-', lw=2, label='РФР')
+ax7.set_xlabel('$r/\sigma$')
+ax7.set_ylabel('RDF')
+
+for ax in [ax1, ax2, ax3, ax4, ax5, ax6, ax7]:
     ax.grid(True, which='major', color='black', linestyle=':', linewidth=1, alpha=0.7)
     ax.minorticks_on()
     ax.grid(True, which='minor', color='gray', linestyle=':', linewidth=0.7, alpha=0.7)
